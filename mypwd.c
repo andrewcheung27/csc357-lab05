@@ -126,5 +126,7 @@ int main(void) {
     writePath(data, data->myStat.st_ino, data->myStat.st_dev);
 
     printf("%s\n", data->path + data->index);
+
+    return 0;
 }
 
