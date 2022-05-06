@@ -39,6 +39,8 @@ Path *createPath() {
         perror("malloc");
         exit(EXIT_FAILURE);
     }
+    path->arr[path->index] = '\0';
+    path->index--;
 
     stat("/", &path->myStat);
     path->rootIno = path->myStat.st_ino;
@@ -54,7 +56,7 @@ void addToPath(char *name, Path *path) {
 
     path->index -= len + 1;  /* room for the name with a slash in front */
     if (path->index < 0) {
-        fprintf(stderr, "path too long");
+        fprintf(stderr, "path too long\n");
         exit(EXIT_FAILURE);
     }
 
