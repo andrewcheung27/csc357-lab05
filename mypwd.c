@@ -9,98 +9,122 @@
 #define DEFAULT_PATH_MAX 2048
 
 
-typedef struct Path {
-    char *arr;
-    int index;
+typedef struct Data {
+    char *path;  /* path that will be printed */
+    int index;  /* index in path array */
 
-    /* data for writePath() */
+    /* data for writePath(), this stuff is here so that it doesn't have to be
+     * allocated on the stack each call */
     struct dirent *myDirent;
     struct stat childStat;
     struct stat myStat;
     ino_t rootIno;
     dev_t rootDev;
-} Path;
+} Data;
 
 
-Path *createPath() {
-    Path *path = (Path *) malloc(sizeof(Path));
-    if (path == NULL) {
+Data *initializeData() {
+    Data *data = (Data *) malloc(sizeof(Data));
+    if (data == NULL) {
         perror("malloc");
         exit(EXIT_FAILURE);
     }
 
-    path->index = DEFAULT_PATH_MAX - 1;
+    /* max path length will be PATH_MAX, or 2048 if it is not defined.
+     * index will start at the end of the path array */
+    data->index = DEFAULT_PATH_MAX - 1;
     #ifdef PATH_MAX
-    path->index = PATH_MAX - 1;
+    data->index = PATH_MAX - 1;
     #endif
 
-    path->arr = (char *) malloc(sizeof(char) * (path->index + 1));
-    if (path->arr == NULL) {
+    data->path = (char *) malloc(sizeof(char) * (data->index + 1));
+    if (data->path == NULL) {
         perror("malloc");
         exit(EXIT_FAILURE);
     }
-    path->arr[path->index] = '\0';
-    path->index--;
+    data->path[data->index] = '\0';  /* path will be null-terminated */
+    data->index--;
 
-    stat("/", &path->myStat);
-    path->rootIno = path->myStat.st_ino;
-    path->rootDev = path->myStat.st_dev;
+    /* store root i-node and device number, writePath() will stop when it gets
+     * to root */
+    if (stat("/", &data->myStat) == -1) {
+        perror("stat");
+        exit(EXIT_FAILURE);
+    }
+    data->rootIno = data->myStat.st_ino;
+    data->rootDev = data->myStat.st_dev;
 
-    return path;
+    return data;
 }
 
 
-void addToPath(char *name, Path *path) {
+void addToPath(char *name, Data *data) {
     int i;
     int len = strlen(name);
 
-    path->index -= len + 1;  /* room for the name with a slash in front */
-    if (path->index < 0) {
+    data->index -= len + 1;  /* room for the name with a slash in front */
+    if (data->index < 0) {
         fprintf(stderr, "path too long\n");
         exit(EXIT_FAILURE);
     }
 
-    (path->arr)[path->index] = '/';
+    /* copy name into array with '/' in front */
+    data->path[data->index] = '/';
     for (i = 0; i < len; i++) {
-        (path->arr)[path->index + i + 1] = name[i];
+        data->path[data->index + i + 1] = name[i];
     }
 }
 
 
-void writePath(Path *path, ino_t ino, dev_t dev) {
+void writePath(Data *data, ino_t ino, dev_t dev) {
     DIR *dir;
 
     /* go one level up */
-    chdir("..");
+    if (chdir("..") == -1) {
+        fprintf(stderr, "cannot get current directory\n");
+        exit(EXIT_FAILURE);
+    }
     dir = opendir(".");
+    if (dir == NULL) {
+        perror("opendir");
+        exit(EXIT_FAILURE);
+    }
 
-    stat(".", &path->myStat);
-    if (ino == path->rootIno && dev == path->rootDev) {
+    /* stop if we get to root */
+    if (stat(".", &data->myStat) == -1) {
+        perror("stat");
+        exit(EXIT_FAILURE);
+    }
+    if (ino == data->rootIno && dev == data->rootDev) {
         return;
     }
 
     /* find name of previous dir and write it */
-    while ( (path->myDirent = readdir(dir)) ) {
-        stat(path->myDirent->d_name, &path->childStat);
-        if (path->childStat.st_ino == ino && path->childStat.st_dev == dev) {
-            addToPath(path->myDirent->d_name, path);
-            writePath(path, path->myStat.st_ino, path->myStat.st_dev);
+    while ( (data->myDirent = readdir(dir)) ) {
+        stat(data->myDirent->d_name, &data->childStat);
+
+        if (data->childStat.st_ino == ino && data->childStat.st_dev == dev) {
+            addToPath(data->myDirent->d_name, data);
+            writePath(data, data->myStat.st_ino, data->myStat.st_dev);
             closedir(dir);
             return;
         }
     }
 
-    fprintf(stderr, "cannot get current directory");
+    fprintf(stderr, "cannot get current directory\n");
     exit(EXIT_FAILURE);
 }
 
 
 int main(void) {
-    Path *path = createPath();
+    Data *data = initializeData();
 
-    stat(".", &path->myStat);
-    writePath(path, path->myStat.st_ino, path->myStat.st_dev);
+    if (stat(".", &data->myStat) == -1) {
+        perror("stat");
+        exit(EXIT_FAILURE);
+    }
+    writePath(data, data->myStat.st_ino, data->myStat.st_dev);
 
-    printf("%s\n", path->arr + path->index);
+    printf("%s\n", data->path + data->index);
 }
 
