@@ -101,7 +101,7 @@ void writePath(Data *data, ino_t ino, dev_t dev) {
 
     /* find name of previous dir and write it */
     while ( (data->myDirent = readdir(dir)) ) {
-        stat(data->myDirent->d_name, &data->childStat);
+        lstat(data->myDirent->d_name, &data->childStat);
 
         if (data->childStat.st_ino == ino && data->childStat.st_dev == dev) {
             addToPath(data->myDirent->d_name, data);
@@ -119,7 +119,7 @@ void writePath(Data *data, ino_t ino, dev_t dev) {
 int main(void) {
     Data *data = initializeData();
 
-    if (stat(".", &data->myStat) == -1) {
+    if (lstat(".", &data->myStat) == -1) {
         perror("stat");
         exit(EXIT_FAILURE);
     }
